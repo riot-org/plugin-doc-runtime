@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 用已有运行时底包 + 本仓库源码打 Windows 插件包。
 
@@ -108,7 +108,7 @@ New-Item -ItemType Directory -Path $tmp -Force | Out-Null
 & tar.exe -xf $tar -C $tmp
 if ($LASTEXITCODE -ne 0) { Fail '展开运行时 tar 失败' }
 Remove-Item -LiteralPath $tar -Force
-$kids = Get-ChildItem -LiteralPath $tmp -Directory
+$kids = @(Get-ChildItem -LiteralPath $tmp -Directory)
 if ($kids.Count -ne 1) { Fail "运行时包顶层该有一个目录，实际 $($kids.Count) 个" }
 Get-ChildItem -LiteralPath $kids[0].FullName | ForEach-Object {
   Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $Stage $_.Name) -Recurse -Force
