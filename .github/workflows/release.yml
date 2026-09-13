@@ -1,0 +1,109 @@
+# 打插件包并发布。
+#
+# 运行时底包不进 git，事先放到本仓库 tag=runtime 的 Release：
+#   macOS:   node scripts/build.mjs --seed --upload
+#   Windows: pwsh scripts/seed.ps1   （再 gh release upload runtime …）
+#
+# 触发：打 tag v* / doc-runtime-v*，或手动 Run workflow。
+
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - 'doc-runtime-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pack:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            platform: darwin-arm64
+          - os: windows-2022
+            platform: win-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: 下载运行时底包
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dist
+          gh release download runtime --repo "${{ github.repository }}" --pattern "runtime-${{ matrix.platform }}.tar.zst" --dir dist
+
+      - name: 打包（macOS）
+        if: runner.os == 'macOS'
+        run: node scripts/build.mjs --runtime "dist/runtime-${{ matrix.platform }}.tar.zst"
+
+      - name: 打包（Windows）
+        if: runner.os == 'Windows'
+        run: pwsh -File scripts/build.ps1 -Runtime "dist/runtime-${{ matrix.platform }}.tar.zst"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pack-${{ matrix.platform }}
+          path: dist/${{ matrix.platform }}/*
+          if-no-files-found: error
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 读版本
+        id: ver
+        run: |
+          v=$(node -p "require('./plugin.json').version")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "tag=doc-runtime-v$v" >> "$GITHUB_OUTPUT"
+
+      - name: 上传 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ steps.ver.outputs.tag }}"
+          files=(artifacts/pack-*/*.tar.zst)
+          if ! gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "$tag" --repo "${{ github.repository }}" --title "$tag" --notes "Riot 插件 $tag"
+          fi
+          gh release upload "$tag" "${files[@]}" --repo "${{ github.repository }}" --clobber
+
+      - name: 更新官方目录
+        env:
+          MARKETPLACE_TOKEN: ${{ secrets.MARKETPLACE_TOKEN }}
+        run: |
+          if [ -z "$MARKETPLACE_TOKEN" ]; then
+            echo "未配置 MARKETPLACE_TOKEN，跳过更新 riot-marketplace。Release 已上传。"
+            exit 0
+          fi
+          git clone --depth 1 "https://x-access-token:${MARKETPLACE_TOKEN}@github.com/riot-org/riot-marketplace.git" marketplace
+          node scripts/publish-market.mjs --catalog marketplace/marketplace.json artifacts/pack-*/marketplace.json
+          cd marketplace
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add marketplace.json
+          git diff --cached --quiet && exit 0
+          git commit -m "发布 ${{ steps.ver.outputs.tag }}"
+          git push

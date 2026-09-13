@@ -1,38 +1,59 @@
 # plugin-doc-runtime
 
-[Riot](https://github.com/riot-org/Riot) 的文档插件源码：创建和编辑 Word、Excel、PowerPoint、PDF。
+[Riot](https://github.com/riot-org/Riot) 的文档插件：创建和编辑 Word、Excel、PowerPoint、PDF。
 
-这个仓库是标准 Agent Plugin 布局（`plugin.json` + `skills/` + `mcp.json`）。Python / Node / LibreOffice 那些运行时**不在 git 里** —— 打包时从本机 Codex 运行时抽出，打成 tar.zst 放到本仓库的 [Releases](https://github.com/riot-org/plugin-doc-runtime/releases)。官方市场上架条目在 [`riot-org/riot-marketplace`](https://github.com/riot-org/riot-marketplace)。
+仓库里是源码和打包脚本。Python / Node / LibreOffice / `@oai/artifact-tool` **不进 git**（单个包两百多 MB，且 artifact-tool 是 Codex 私有包）。运行时底包放在本仓库 [tag=`runtime` 的 Release](https://github.com/riot-org/plugin-doc-runtime/releases/tag/runtime)。改 skill 之后由 GitHub Actions 下载底包、叠源码、打安装包。
 
-用户在 Riot 里从市场安装，不要 clone 本仓库当安装包：源码树里没有二进制，链本地目录会自检失败。
+用户在 Riot 里从市场安装。不要把本仓库当安装目录链接：源码树里没有二进制，自检会失败。官方目录：[`riot-org/riot-marketplace`](https://github.com/riot-org/riot-marketplace)。
 
 ## 目录
 
 ```
-plugin.json     身份和 Riot 接线（extensions["dev.riot"]）
-mcp.json        artifact-tool MCP
-skills/         documents / spreadsheets / presentations / pdf
+plugin.json                 身份和 Riot 接线
+mcp.json                    artifact-tool MCP
+skills/                     documents / spreadsheets / presentations / pdf
+scripts/build.mjs           macOS：seed 运行时 + 打插件包
+scripts/build.ps1           Windows：用已有运行时打插件包
+scripts/seed.ps1            Windows：从本机 Codex 抽出运行时（只需一次）
+.github/workflows/release.yml
 ```
 
-## 改 skill
+## 日常：改源码，Actions 打包
 
-直接改 `skills/<名>/`。改完在 Riot 仓库打包：
+1. 改 `skills/` 或 `plugin.json`（版本号在 `plugin.json`）。
+2. 推到 `main`，打 tag：`git tag v0.2.1 && git push origin v0.2.1`（或在 Actions 里 Run workflow）。
+3. Actions 在 `macos-14` / `windows-2022` 上各打一份，上传到 `doc-runtime-v<版本>`。
+4. 若仓库 Secrets 里有 `MARKETPLACE_TOKEN`（能推 `riot-org/riot-marketplace`），会顺带更新官方目录。没有就只发 Release，再手工并清单。
+
+## 第一次：把运行时底包传上去
+
+只在换 Codex 运行时、换 LibreOffice、换 artifact-tool 时才要重做。
 
 ```bash
-# macOS
-node scripts/build-doc-plugin.mjs
+# 装过 Codex 的 Mac
+node scripts/build.mjs --seed --upload
 
-# Windows
-pwsh scripts/build-doc-plugin.ps1
-
-# 两个平台的产物都到齐之后
-node scripts/doc-plugin/publish.mjs
+# 装过 Codex 的 Windows
+pwsh scripts/seed.ps1
+gh release upload runtime dist/runtime-win-x64.tar.zst --repo riot-org/plugin-doc-runtime --clobber
 ```
 
-构建读本仓库源码，产物写到 Riot 的 `dist/doc-plugin/<平台>/`，再上传到 Releases。不要把 tar.zst 或平台清单提交进来。
+本地打一份插件包（不经 Actions）：
 
-Codex 上游 skill 大改时，在 Riot 仓库跑一次导入（会覆盖 `skills/`，再自己审 diff）：
+```bash
+node scripts/build.mjs
+# 或
+pwsh scripts/build.ps1
+```
+
+产物在 `dist/<平台>/`，不要提交。
+
+## 从 Codex 更新 skill 正文
+
+在 Riot 仓库：
 
 ```bash
 node scripts/doc-plugin/import-skills.mjs
 ```
+
+会覆盖本仓库 `skills/`，审完 diff 再提交。
