@@ -1,6 +1,4 @@
-# 包体不进 git：GitHub 拒收超过 100MB 的单个文件，而一个包两百多 MB。
-# 它们走本仓库的 Releases，由 Riot 仓库的 scripts/doc-plugin/publish.mjs 上传。
-*.tar.zst
-*.tar
-*.zip
 .DS_Store
+dist/
+*.tar.zst
+__pycache__/

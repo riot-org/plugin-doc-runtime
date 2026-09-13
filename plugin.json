@@ -1,0 +1,56 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "doc-runtime",
+  "version": "0.2.0",
+  "description": "创建和编辑 Word、Excel、PowerPoint、PDF。自带 Python、Node、LibreOffice 和中文字体，不需要电脑上装任何开发环境。",
+  "author": {
+    "name": "Riot"
+  },
+  "repository": "https://github.com/riot-org/plugin-doc-runtime",
+  "keywords": [
+    "documents",
+    "docx",
+    "xlsx",
+    "pptx",
+    "pdf"
+  ],
+  "extensions": {
+    "dev.riot": {
+      "env": {
+        "RUNTIME_NODE": "./bin/node",
+        "RUNTIME_NODE_MODULES": "./node/node_modules",
+        "RUNTIME_BIN_DIR": "./bin"
+      },
+      "pathPrepend": [
+        "./path"
+      ],
+      "selfCheck": [
+        {
+          "command": "./bin/python3",
+          "args": [
+            "-c",
+            "import docx, pptx, openpyxl, pdfplumber, reportlab"
+          ]
+        },
+        {
+          "command": "./bin/node",
+          "args": [
+            "-v"
+          ]
+        },
+        {
+          "command": "./bin/soffice",
+          "args": [
+            "--version"
+          ]
+        },
+        {
+          "command": "./bin/pdftoppm",
+          "args": [
+            "-v"
+          ]
+        }
+      ]
+    }
+  }
+}

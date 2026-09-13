@@ -1,0 +1,12 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "doc-artifact-tool": {
+      "type": "stdio",
+      "command": "./bin/node",
+      "args": [
+        "${PLUGIN_ROOT}/node/node_modules/@oai/artifact-tool/dist/artifact-session-mcp/server.mjs"
+      ]
+    }
+  }
+}
