@@ -15,6 +15,8 @@ skills/                     documents / spreadsheets / presentations / pdf
 scripts/build.mjs           macOS：seed 运行时 + 打插件包
 scripts/build.ps1           Windows：用已有运行时打插件包
 scripts/seed.ps1            Windows：从本机 Codex 抽出运行时（只需一次）
+scripts/import-skills.mjs   从本机 Codex 更新 skills/
+scripts/verify.mjs          对解开的包装完冒烟
 .github/workflows/release.yml
 ```
 
@@ -33,9 +35,9 @@ scripts/seed.ps1            Windows：从本机 Codex 抽出运行时（只需�
 # 装过 Codex 的 Mac
 node scripts/build.mjs --seed --upload
 
-# 装过 Codex 的 Windows
-pwsh scripts/seed.ps1
-gh release upload runtime dist/runtime-win-x64.tar.zst --repo riot-org/plugin-doc-runtime --clobber
+# 装过 Codex 的 Windows（系统自带 powershell 即可，不必装 PowerShell 7）
+powershell -ExecutionPolicy Bypass -File scripts\seed.ps1
+gh release upload runtime dist\runtime-win-x64.tar.zst --repo riot-org/plugin-doc-runtime --clobber
 ```
 
 本地打一份插件包（不经 Actions）：
@@ -43,17 +45,17 @@ gh release upload runtime dist/runtime-win-x64.tar.zst --repo riot-org/plugin-do
 ```bash
 node scripts/build.mjs
 # 或
-pwsh scripts/build.ps1
+powershell -ExecutionPolicy Bypass -File scripts\build.ps1
 ```
 
-产物在 `dist/<平台>/`，不要提交。
+产物在 `dist/<平台>/`，不要提交。冒烟：`node scripts/verify.mjs <解开的插件目录>`。
 
 ## 从 Codex 更新 skill 正文
 
-在 Riot 仓库：
+本机装过 Codex 文档插件时：
 
 ```bash
-node scripts/doc-plugin/import-skills.mjs
+node scripts/import-skills.mjs
 ```
 
-会覆盖本仓库 `skills/`，审完 diff 再提交。
+会覆盖 `skills/`，审完 diff 再提交。

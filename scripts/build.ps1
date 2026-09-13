@@ -14,8 +14,8 @@ Release。本脚本（以及 GitHub Actions）只下载那份底包，叠上 ski
 产物目录。不传就取 dist\win-x64。
 
 .EXAMPLE
-pwsh scripts/build.ps1
-pwsh scripts/build.ps1 -Runtime D:\runtime-win-x64.tar.zst
+powershell -File scripts\build.ps1
+powershell -File scripts\build.ps1 -Runtime D:\runtime-win-x64.tar.zst
 #>
 #Requires -Version 5.1
 [CmdletBinding()]
@@ -66,7 +66,7 @@ if (-not (Test-Path -LiteralPath $Runtime)) {
 找不到运行时包:
   $Runtime
 在装过 Codex 的 Windows 上先跑:
-  pwsh scripts/seed.ps1
+  powershell -File scripts\seed.ps1
 再把 dist\runtime-win-x64.tar.zst 传到本仓库 tag=runtime 的 Release。
 "@
 }

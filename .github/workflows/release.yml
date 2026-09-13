@@ -2,7 +2,7 @@
 #
 # 运行时底包不进 git，事先放到本仓库 tag=runtime 的 Release：
 #   macOS:   node scripts/build.mjs --seed --upload
-#   Windows: pwsh scripts/seed.ps1   （再 gh release upload runtime …）
+#   Windows: powershell -File scripts\seed.ps1   （再 gh release upload runtime …）
 #
 # 触发：打 tag v* / doc-runtime-v*，或手动 Run workflow。
 

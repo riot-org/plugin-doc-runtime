@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 从本机 Codex 运行时抽出 Windows 底包，写成 dist\runtime-win-x64.tar.zst。
 
