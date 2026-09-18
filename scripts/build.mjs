@@ -90,6 +90,10 @@ fs.mkdirSync(STAGE, { recursive: true });
 step('展开运行时');
 unpackTarZst(RUNTIME_TAR, STAGE);
 log(`  ← ${RUNTIME_TAR}`);
+// 底包里可能带着坏链接（老底包裁剪 share/terminfo 时留下的 lib/terminfo，
+// Codex 运行时自带的几条指向安装机临时目录的绝对链接）。在这里清，现有的
+// runtime 底包不用重新 seed。
+for (const line of pruneBrokenSymlinks(STAGE)) log(`  删掉坏链接 ${line}`);
 
 step('叠源码');
 copyDir(path.join(ROOT, 'skills'), path.join(STAGE, 'skills'));
@@ -100,6 +104,16 @@ pluginJson.extensions['dev.riot'] ??= {};
 pluginJson.extensions['dev.riot'].platforms = [PLATFORM];
 pluginJson.extensions['dev.riot'].builtAt = new Date().toISOString();
 fs.writeFileSync(path.join(STAGE, 'plugin.json'), `${JSON.stringify(pluginJson, null, 2)}\n`);
+
+// 打包前最后一道闸：包里不许有绝对的或悬空的符号链接。0.2.0 就是 147 条
+// 动态库别名全变成了构建机上的绝对路径，装到用户机器上 dyld 报
+// "Library not loaded"，一个字不提解压。这里拦住，比让 verify 去猜快得多。
+{
+  const broken = findBrokenSymlinks(STAGE);
+  if (broken.length > 0) {
+    fail(`铺出的目录里有 ${broken.length} 条装上去必坏的符号链接：\n  ${broken.join('\n  ')}`);
+  }
+}
 
 const installedSize = dirSize(STAGE);
 log(`铺出完成: ${mb(installedSize)}`);
@@ -154,6 +168,11 @@ async function seedRuntime() {
     }
   }
   pruneCaches(path.join(stage, 'python'));
+  // man 页和 pkgconfig 运行时用不到，而且 Codex 装出来的这两处里有指向安装机
+  // 临时目录（/var/folders/…/codex-primary-runtime-…）的绝对链接。
+  for (const rel of ['share/man', 'lib/pkgconfig']) {
+    fs.rmSync(path.join(stage, 'python', rel), { recursive: true, force: true });
+  }
   log(`  python: ${mb(dirSize(path.join(stage, 'python')))}`);
 
   step('Node 与 artifact-tool');
@@ -188,6 +207,13 @@ async function seedRuntime() {
     if (!KEEP_BINS.includes(e)) fs.rmSync(path.join(popBin, e), { force: true });
   }
   log(`  poppler: ${mb(dirSize(path.join(stage, 'poppler')))}`);
+
+  step('清理坏链接');
+  // 上面裁掉 share/terminfo 之后，ncurses 的 lib/terminfo -> ../share/terminfo
+  // 就悬空了；Codex 运行时里还有几条绝对链接。统一在这儿扫一遍。
+  const pruned = pruneBrokenSymlinks(stage);
+  for (const line of pruned) log(`  删掉 ${line}`);
+  if (pruned.length === 0) log('  没有');
 
   step('CJK 字体');
   const fontDir = path.join(stage, 'libreoffice/LibreOfficeDev.app/Contents/Resources/fonts/truetype');
@@ -293,10 +319,53 @@ function unpackTarZst(file, dest) {
   const kids = fs.readdirSync(tmp).filter((n) => !n.startsWith('.'));
   if (kids.length !== 1) fail(`${file} 顶层该有一个目录，实际: ${kids.join(', ')}`);
   const inner = path.join(tmp, kids[0]);
+  // `[约束]` 这里不能用 fs.cpSync：它默认（verbatimSymlinks 关）把相对符号链接
+  // 改写成源文件的绝对路径，下一行把 tmp 一删，包里 147 条动态库别名全部悬空
+  // —— 0.2.0 就是这么坏的。同一个文件系统里 rename 是瞬间的，链接、权限、
+  // 时间戳原样。
   for (const name of fs.readdirSync(inner)) {
-    fs.cpSync(path.join(inner, name), path.join(dest, name), { recursive: true });
+    fs.renameSync(path.join(inner, name), path.join(dest, name));
   }
   fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// 装到别的机器上必坏的符号链接：目标是绝对路径的（打包机的路径，用户机器
+// 上没有）、指到树外的、目标不存在的。返回一行一条的描述。
+function findBrokenSymlinks(root) {
+  return [...brokenSymlinks(root)].map(({ link, target, reason }) =>
+    `${path.relative(root, link)} -> ${target}（${reason}）`);
+}
+
+// 删掉 findBrokenSymlinks 找到的那些。悬空的链接和没有这条链接对程序是一回事，
+// 留着只会让排查方向跑偏。返回删了哪些，给日志。
+function pruneBrokenSymlinks(root) {
+  const gone = [];
+  for (const { link, target, reason } of brokenSymlinks(root)) {
+    fs.rmSync(link, { force: true });
+    gone.push(`${path.relative(root, link)} -> ${target}（${reason}）`);
+  }
+  return gone;
+}
+
+function* brokenSymlinks(root) {
+  for (const link of walkSymlinks(root)) {
+    const target = fs.readlinkSync(link);
+    const resolved = path.resolve(path.dirname(link), target);
+    const rel = path.relative(root, resolved);
+    const reason = path.isAbsolute(target) ? '绝对路径'
+      : rel.startsWith('..') || path.isAbsolute(rel) ? '指向树外'
+        : !fs.existsSync(resolved) ? '目标不存在'
+          : null;
+    if (reason) yield { link, target, reason };
+  }
+}
+
+function* walkSymlinks(dir) {
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isSymbolicLink()) yield p;
+    else if (e.isDirectory()) yield* walkSymlinks(p);
+  }
 }
 
 async function fetchCjkFonts() {

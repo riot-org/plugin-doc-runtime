@@ -52,6 +52,36 @@ jobs:
         if: runner.os == 'Windows'
         run: pwsh -File scripts/build.ps1 -Runtime "dist/runtime-${{ matrix.platform }}.tar.zst"
 
+      # 冒烟的是打出来的 .tar.zst 本身，不是铺出目录 —— 0.2.0 坏在打包那一步
+      # （符号链接被改写成构建机的绝对路径），只验铺出目录看不出来。
+      # macOS 失败就中止发布；publish 依赖这个 job。
+      - name: 冒烟（macOS）
+        if: runner.os == 'macOS'
+        run: |
+          set -euo pipefail
+          out=$(ls dist/${{ matrix.platform }}/*.tar.zst)
+          rm -rf "$RUNNER_TEMP/verify" && mkdir -p "$RUNNER_TEMP/verify"
+          node scripts/zstd.mjs -d "$out" "$RUNNER_TEMP/pack.tar"
+          tar -xf "$RUNNER_TEMP/pack.tar" -C "$RUNNER_TEMP/verify" --strip-components 1
+          node scripts/verify.mjs "$RUNNER_TEMP/verify"
+
+      # Windows 的冒烟先不拦发布：verify.mjs 在 windows-2022 runner 上还没跑过，
+      # LibreOffice 首次启动和 Git bash shim 都可能因为 runner 环境而不是包本身
+      # 出错。跑稳几次之后把 continue-on-error 去掉。
+      - name: 冒烟（Windows）
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $out = Get-ChildItem "dist/${{ matrix.platform }}/*.tar.zst" | Select-Object -First 1
+          $dir = Join-Path $env:RUNNER_TEMP 'verify'
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          node scripts/zstd.mjs -d $out.FullName (Join-Path $env:RUNNER_TEMP 'pack.tar')
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          tar.exe -xf (Join-Path $env:RUNNER_TEMP 'pack.tar') -C $dir --strip-components 1
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          node scripts/verify.mjs $dir
+
       - uses: actions/upload-artifact@v4
         with:
           name: pack-${{ matrix.platform }}

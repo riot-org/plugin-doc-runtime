@@ -24,8 +24,10 @@ scripts/verify.mjs          对解开的包装完冒烟
 
 1. 改 `skills/` 或 `plugin.json`（版本号在 `plugin.json`）。
 2. 推到 `main`，打 tag：`git tag v0.2.1 && git push origin v0.2.1`（或在 Actions 里 Run workflow）。
-3. Actions 在 `macos-14` / `windows-2022` 上各打一份，上传到 `doc-runtime-v<版本>`。
+3. Actions 在 `macos-14` / `windows-2022` 上各打一份，把打出来的 `.tar.zst` 解开跑一遍 `verify.mjs`（macOS 失败即中止发布），再上传到 `doc-runtime-v<版本>`。
 4. 若仓库 Secrets 里有 `MARKETPLACE_TOKEN`（能推 `riot-org/riot-marketplace`），会顺带更新官方目录。没有就只发 Release，再手工并清单。
+
+改了包里的任何东西都要升 `plugin.json` 的版本号再发：Riot 按 `<名字>-<版本>.tar.zst` 缓存下载，同版本换内容会撞校验和。
 
 ## 第一次：把运行时底包传上去
 
